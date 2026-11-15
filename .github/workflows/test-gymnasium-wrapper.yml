@@ -1,0 +1,66 @@
+name: Test Gymnasium wrapper
+
+on:
+  push:
+    paths:
+      - '.github/workflows/test-gymnasium-wrapper.yml'
+      - 'gymnasium_wrapper/**'
+      - 'include/**'
+      - 'src/**'
+      - 'tests/test_gymnasium_wrapper.py'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/test-gymnasium-wrapper.yml'
+      - 'gymnasium_wrapper/**'
+      - 'include/**'
+      - 'src/**'
+      - 'tests/test_gymnasium_wrapper.py'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test_gymnasium_wrapper:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Install dependencies on Ubuntu
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt update
+        sudo apt install -y cmake git libboost-all-dev libsdl2-dev libopenal-dev
+
+    - name: Apt report
+      if: runner.os == 'Linux'
+      run: apt list --installed
+
+    - name: Set up Python environment
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+
+    - name: Python environment report
+      run: python -c "import sys; print(sys.version)"
+
+    - name: Pip install
+      run: pip install .[test]
+
+    - name: Import and init check
+      run: python -c "import vizdoom; g = vizdoom.DoomGame(); g.set_window_visible(False); g.set_console_enabled(True); g.set_audio_buffer_enabled(True); g.init()"
+      timeout-minutes: 1
+
+    - name: Run tests
+      run: pytest tests/test_gymnasium_wrapper.py -v -s --timeout=300 --timeout-method=thread
+      timeout-minutes: 120

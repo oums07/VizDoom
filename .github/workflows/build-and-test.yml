@@ -1,0 +1,95 @@
+name: Build and test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-and-test.yml'
+      - 'include/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/build-and-test.yml'
+      - 'include/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  DYLD_LIBRARY_PATH: "/opt/homebrew/opt/openal-soft/lib:/usr/local/opt/openal-soft/lib"
+
+jobs:
+  build_and_test:
+    name: Build and test on ${{ matrix.os }} with Python ${{ matrix.python-version }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+      fail-fast: true
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Report OS
+      run: |
+        echo ${{ matrix.os }}
+        echo ${{ runner.os }}
+        uname -p
+
+    - name: Install dependencies on Ubuntu
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt update
+        sudo apt install -y cmake git libboost-all-dev libsdl2-dev libopenal-dev
+        apt list --installed
+
+    - name: Install dependencies on macOS
+      if: runner.os == 'macOS'
+      run: |
+        brew config
+        brew uninstall cmake
+        brew install cmake boost openal-soft sdl2
+
+    - name: Set up Python ${{ matrix.python-version }} environment
+      uses: actions/setup-python@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Python environment report
+      run: python -c "import sys; print(sys.version)"
+
+    - name: CMake report
+      run: |
+        cmake --version
+        cmake -DBUILD_PYTHON=ON .
+        rm -rf CMakeCache.txt
+
+    - name: Pip install
+      run: |
+        pip install .[test]
+        pip freeze
+
+    - name: Import and init check
+      run: python -c "import vizdoom; g = vizdoom.DoomGame(); g.set_window_visible(False); g.set_console_enabled(True); g.set_audio_buffer_enabled(True); g.init()"
+      timeout-minutes: 1
+
+    - name: Run tests
+      run: pytest tests -v -s --timeout=300 --timeout-method=thread --ignore=tests/test_gymnasium_wrapper.py  # Skip gymnasium wrapper tests as they are tested in a separate workflow and take a long time to run
+      timeout-minutes: 15
